@@ -20,7 +20,7 @@ pip install autopep8
 
 OpenAI:
 You must have openaiKey to use this program. 
-Create openAI_key.txt file in the same folder of comment_py_file.py, paste your openAIkey and save it
+Create openAI_key.txt file in the same folder of comment_py_file.py, paste your openAIkey string and save it
 
 Principle:
 When the program is run, 3 folders are created if missing: Push_code_here where the code to be commented will be deposited, Original where a copy of each code before modification will be copied and Modified where the commented code will be created.
