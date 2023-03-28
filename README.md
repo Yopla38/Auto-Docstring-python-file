@@ -3,14 +3,20 @@ This repository allows to auto document a python file via GPT_3-5 by dividing th
 
 Linux:
 Create an environnement conda:
-'conda create --name comment python=3.7'
+```
+conda create --name comment python=3.7
+```
 
 Active environnement:
-'conda activate comment'
+```
+conda activate comment
+```
 
 Install all dependency:
-'pip install openai'
-'pip install autopep8'
+```
+pip install openai
+pip install autopep8
+```
 
 OpenAI:
 You must have openaiKey to use this program. 
