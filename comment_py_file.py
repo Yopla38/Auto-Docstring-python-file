@@ -15,7 +15,7 @@ import re
 import ast
 from openai.error import OpenAIError
 import autopep8
-
+from distutils import dir_util
 
 
 API_langage = {"en": "You are able to write doc-strings respecting PEP 7 and google style convention by adding them to the "
@@ -63,30 +63,6 @@ def get_openai_api_key():
         return None
 
 
-
-
-
-
-# ---------------------------------------------------------------------
-#                           C PART
-# ---------------------------------------------------------------------
-
-'''
-def num_tokens_from_string(string: str, encoding_name: str) -> int:
-    """Returns the number of tokens in a text string."""
-    encoding = tiktoken.get_encoding(encoding_name)
-    num_tokens = len(encoding.encode(string))
-    return num_tokens
-
-text = """The OpenAI API can be applied to virtually any task that involves understanding or generating natural language or code. We offer a spectrum of models with different levels of power suitable for different tasks, as well as the ability to fine-tune your own custom models. These models can be used for everything from content generation to semantic search and classification."""
-
-num_tokens = num_tokens_from_string(text, "gpt2")
-print(num_tokens)
-'''
-
-
-
-
 class ReplaceEmptyValue(ast.NodeTransformer):
     def visit(self, node):
         """
@@ -101,10 +77,6 @@ class ReplaceEmptyValue(ast.NodeTransformer):
         if isinstance(node, ast.Expr) and node.value is None:
             return ast.Expr(value=ast.Constant(value=None))
         return node
-
-
-
-
 
 
 def generate_uml_diagram(code_str, output_file):
@@ -135,8 +107,6 @@ def generate_uml_diagram(code_str, output_file):
 
     # Suppression des fichiers temporaires
     subprocess.run(f'rm {tmp_file} {dot_file}'.split(), check=True)
-
-
 
 
 def generate_prompt(dot_file_path, code_string):
@@ -203,115 +173,125 @@ class commentateur:
             # Vérifiez si le dossier "Push code here" existe
             self.push_code_here_path = path_to_watch
             if not os.path.exists(self.push_code_here_path):
-                self._print("Le dossier \"Push_code_here\" n'existe pas")
+                self._print(f"The Folder {path_to_watch} doesn't exist")
                 os.mkdir(self.push_code_here_path)
-                self._print("Dossier Push_code_here créée")
-                return
+                self._print(f"Folder {path_to_watch} created")
+
 
             # Vérifiez si le dossier "Original" existe, sinon le créez
             self.original_path = path_to_copy
             if not os.path.exists(self.original_path):
                 os.mkdir(self.original_path)
-                self._print("Dossier \"Original\" créé")
+                self._print(f"Folder {path_to_copy} created")
 
             # Vérifiez si le dossier "Modified" existe, sinon le créez
             self.modified_path = path_to_save
             if not os.path.exists(self.modified_path):
                 os.mkdir(self.modified_path)
-                self._print("Dossier \"Modified\" créé")
+                self._print(f"Folder {path_to_save} created")
 
-    def watch_push_code_here(self, folder= None, delay_time: int = 2):
-        """
-        This function watches the directory "Push code here" and performs different tasks depending on the type of files it finds there.
-        It first checks if the directory exists and creates directories "Original" and "Modified" if they do not already exist. It then loops through all the files and subdirectories, and if it finds a file, it copies it to "Original" and processes the file based on its type of extension.
-        For files with a ".py" extension, it reads the file, adds a python docstring, auto-formats the code, and writes the new code to a file in "Modified" directory. It also comments full code and looks for any uncommented lines.
-        For files with a ".c" extension, it reads the file, comments the C function, and writes the new code to a file in the "Modified" directory.
-        For files with a ".mat" extension, it extracts Matlab functions and methods.
-        For files with a ".pas" and ".p" extension, it reads the file, performs Turbo-Pascal-Function-to-Python conversion, and writes the new code to a file in the "Modified" directory. It then deletes the original file from the directory "Push code here".
-        The function does not take any arguments.
-        """
-        print("Waiting new file...")
-        code_here = self.push_code_here_path if folder is None else folder
-
+    def process_folder(self):
         while True:
-            time.sleep(delay_time)
-            # Parcourez tous les fichiers et dossiers dans "Push code here"
-            for item in os.listdir(code_here):
-                item_path = os.path.join(code_here, item)
+            for dir_path, dir_names, file_names in os.walk(self.push_code_here_path):
+                for dir_name in dir_names:
+                    orig_dir_path = os.path.join(dir_path, dir_name).replace(self.push_code_here_path,
+                                                                             self.original_path)
+                    mod_dir_path = os.path.join(dir_path, dir_name).replace(self.push_code_here_path,
+                                                                            self.modified_path)
 
-                # Si l'élément est un fichier, copiez-le dans "Original" et traitez-le en fonction de son type de fichier
-                if os.path.isfile(item_path):
-                    # Copiez le fichier dans "Original"
-                    self._print("Working on " + item)
-                    if folder is None:
-                        shutil.copy(item_path, self.original_path)
+                    os.makedirs(orig_dir_path, exist_ok=True)
+                    os.makedirs(mod_dir_path, exist_ok=True)
 
-                    # Traitez le fichier en fonction de son type de fichier
-                    _, file_extension = os.path.splitext(item)
-                    if file_extension == ".py":
-                        # Read the file
-                        with open(item_path, "r") as file:
-                            code = file.read()
-                        # modified_code = comment_python_functions(code)
-                        modified_code, short_resume = self.add_python_docstring(code)
-                        modified_code = autopep8.fix_code(modified_code)
-                        # Write the new code to the file
-                        with open(os.path.join(self.modified_path, item), "w") as file:
-                            file.write(modified_code)
-                        # commente le code complet :
-                        self.comment_full_code(os.path.join(
-                            self.modified_path, item), short_resume)
-                        # Vérifie et commente d'eventuelle lignes non commentées
-                        self.correct_py_file(os.path.join(self.modified_path, item))
+                    dir_util.copy_tree(os.path.join(dir_path, dir_name), orig_dir_path)
 
-                    # C part  NOT IMPLEMENTED YET
-                    elif file_extension == ".c":
-                        # Read the file
-                        with open(item_path, "r") as file:
-                            code = file.read()
-                        modified_code = self.comment_c_function(code)
-                        # Write the new code to the file
-                        with open(os.path.join(self.modified_path, item), "w") as file:
-                            file.write(modified_code)
+                for filename in file_names:
+                    file_path = os.path.join(dir_path, filename)
 
-                    elif file_extension == ".mat":
-                        print()
-                        # extract_matlab_function(item_path)
-                        # extract_matlab_method(item_path)
-                    elif file_extension == ".pas" or file_extension == ".p":
-                        # Read the file
-                        with open(item_path, "r") as file:
-                            code = file.read()
-                        modified_code = extract_pascal_functions(code)
-                        # Write the new code to the file
-                        with open(os.path.join(self.modified_path, item), "w") as file:
-                            file.write(modified_code)
-                        python_convertion = input(
-                            "Do you want to converting pascal code functions to python ? (y/n)")
-                        if python_convertion == "y":
-                            # python_code = convert_turbo_to_python(modified_code)
-                            python_code = ""
-                            # Write the new code to the file
-                            file, ext = os.path.splitext(item)
-                            file = file + ".py"
-                            with open(os.path.join(self.modified_path, file), "w") as file:
-                                file.write(python_code)
-                            self._print("File " + item + " converted in python -> " + str(file))
-                    # Supprimez le fichier de "Push code here"
-                    os.remove(item_path)
-                    self._print(item + " finish")
+                    orig_path = file_path.replace(self.push_code_here_path, self.original_path)
+                    mod_path = file_path.replace(self.push_code_here_path, self.modified_path)
 
-                # Si l'élément est un dossier, parcourez-le récursivement
-                elif os.path.isdir(item_path):
-                    #copie du dossier
-                    shutil.copytree(item_path, self.original_path)
-                    self.watch_push_code_here(folder=item_path)
+                    os.makedirs(os.path.dirname(orig_path), exist_ok=True)
+                    os.makedirs(os.path.dirname(mod_path), exist_ok=True)
+
+                    shutil.copyfile(file_path, orig_path)
+
+                    self.compute_file(file_path, mod_path)
+
+                    os.remove(file_path)
+
+            for root, dirs, _ in os.walk(self.push_code_here_path, topdown=False):
+                for name in dirs:
+                    try:
+                        os.rmdir(os.path.join(root, name))
+                    except OSError:
+                        pass  # If the directory is not empty, an OSError is raised, in that case
+
+            time.sleep(1)
+
+    def compute_file(self, orig_filepath, dest_filepath):
+        item = os.path.basename(orig_filepath)  # get the file name not the path
+        item_path = orig_filepath
+
+        _, file_extension = os.path.splitext(item_path)
+
+        if file_extension == ".py":
+            self._print(f"Working on {item}")
+            with open(item_path, "r") as file:
+                code = file.read()
+            modified_code, short_resume = self.add_python_docstring(code)
+            modified_code = autopep8.fix_code(modified_code)
+
+            with open(dest_filepath, "w") as file:
+                file.write(modified_code)
+
+            self.comment_full_code(dest_filepath, short_resume)
+
+            self.correct_py_file(dest_filepath)
+        else:
+            shutil.copyfile(orig_filepath, dest_filepath)
+
+    def _TO_IMPLEMENT(self):
+
+        # C part  NOT IMPLEMENTED YET
+        if file_extension == ".c":
+            # Read the file
+            with open(item_path, "r") as file:
+                code = file.read()
+            modified_code = self.comment_c_function(code)
+            # Write the new code to the file
+            with open(os.path.join(path_modified, item), "w") as file:
+                file.write(modified_code)
+
+        elif file_extension == ".mat":
+            print()
+            # extract_matlab_function(item_path)
+            # extract_matlab_method(item_path)
+
+        elif file_extension == ".pas" or file_extension == ".p":
+            # Read the file
+            with open(item_path, "r") as file:
+                code = file.read()
+            modified_code = extract_pascal_functions(code)
+            # Write the new code to the file
+            with open(os.path.join(path_modified, item), "w") as file:
+                file.write(modified_code)
+            python_convertion = input(
+                "Do you want to converting pascal code functions to python ? (y/n)")
+            if python_convertion == "y":
+                # python_code = convert_turbo_to_python(modified_code)
+                python_code = ""
+                # Write the new code to the file
+                file, ext = os.path.splitext(item)
+                file = file + ".py"
+                with open(os.path.join(path_modified, file), "w") as file:
+                    file.write(python_code)
+                self._print("File " + item + " converted in python -> " + str(file))
 
     def arg_usage(self, path_file):
         dir, file = os.path.split(path_file)
         _, file_extension = os.path.splitext(file)
 
-        shutil.copy(path_file, os.path.join(dir, '_'+file))
+        shutil.copy(path_file, os.path.join(dir, '_' + file))
         self._print("Original file copied with _ before.")
         if file_extension == ".py":
             # Read the file
@@ -356,7 +336,7 @@ class commentateur:
                 continue
             else:
                 functions_names.remove(function_name[0])
-            
+
             # Récupère le docstring
             doc_string = self.GPT_choice("Turbo", "docstring google style python", function_str)
             short_docstring = self.GPT_choice("Turbo", "short docstring", doc_string)
@@ -385,7 +365,8 @@ class commentateur:
 
         return new_code_str, resume_all_docstring
 
-    def verify_triple_quotes(self, s):
+    @staticmethod
+    def verify_triple_quotes(s):
 
         if not s.startswith("\"\"\""):
             s = "\"\"\"" + s
@@ -431,7 +412,8 @@ class commentateur:
         # Retourner la liste des noms de fonctions
         return noms_fonctions
 
-    def get_dependencies(self, code_str):
+    @staticmethod
+    def get_dependencies(code_str):
         """
         Takes in a string of Python code and returns a list of its module-level dependencies.
 
@@ -489,7 +471,8 @@ class commentateur:
 
         return new_code_str
 
-    def indent_code_str(self, code_str, indentation=4):
+    @staticmethod
+    def indent_code_str(code_str, indentation=4):
         """
         This function takes a string of code and an integer representing the indentation level
         and returns the formatted code string with appropriate indentation.
@@ -516,7 +499,8 @@ class commentateur:
         formatted_code = '\n'.join(lines)
         return formatted_code
 
-    def get_indentation(self, code_str):
+    @staticmethod
+    def get_indentation(code_str):
         """
         This function takes in a string that represents a block of code as input.
         It looks for the first non-empty line of the code block and returns the indentation style used by that line.
@@ -546,7 +530,8 @@ class commentateur:
                 break
         return indentation
 
-    def format_langage(self, langage):
+    @staticmethod
+    def format_langage(langage):
         """Function to format a given programming language
 
             This function takes a parameter langage (string) and based on its input value, it returns a formatted dictionary
@@ -723,7 +708,8 @@ class commentateur:
 
         return None
 
-    def extract_functions(self, code):
+    @staticmethod
+    def extract_functions(code):
         """
         The function extracts all functions in a given source code string and returns them as a list
         of tuples, where each tuple contains the function's source code (as a string) and its indent level (as an integer).
@@ -764,7 +750,8 @@ class commentateur:
 
         return functions
 
-    def extract_C_functions(self, content):
+    @staticmethod
+    def extract_C_functions(content):
         """
         Extracts C functions from input code content string and returns a list of extracted functions.
 
@@ -834,7 +821,8 @@ class commentateur:
             nb_func -= 1
         return new_code_str
 
-    def optimize_token_c(self, function):
+    @staticmethod
+    def optimize_token_c(function):
         """
         This function takes in a function code as a string and performs the following optimization:
         1. Removes any leading white spaces from each line of code
@@ -854,7 +842,8 @@ class commentateur:
         chaine_modifiee = '\n'.join(lignes)
         return chaine_modifiee
 
-    def check_compile(self, filename):
+    @staticmethod
+    def check_compile(filename):
         """
         check_compile: Function to check if the code present in the given filename compiles correctly by using ast module in python.
 
@@ -893,7 +882,8 @@ class commentateur:
                         file.write(
                             f"{filename}:{error.lineno}:{col_offset}: {error.__class__.__name__}: {error}\n")
 
-    def compile_py_file(self, file_name):
+    @staticmethod
+    def compile_py_file(file_name):
         """
         Takes in a file name and compiles it as a python file.
 
@@ -943,7 +933,8 @@ class commentateur:
             with open(file_name, 'w') as f:
                 f.writelines(lines)
 
-    def open_py_file(self, file_name):
+    @staticmethod
+    def open_py_file(file_name):
         """
         This function takes a filename as a parameter and returns the contents of the file as a string.
 
@@ -958,7 +949,8 @@ class commentateur:
         with open(file_name, "r") as file:
             return file.read()
 
-    def compile_py_code(self, code):
+    @staticmethod
+    def compile_py_code(code):
         '''
         This function takes a string argument 'code' and attempts to compile it using the built-in Python function: compile. The code is compiled as an executable by specifying the third argument as "exec" in the compile function. If there is a syntax error, the function catches it using a try-except block and returns the line number where the error occurred as an integer.
 
@@ -1011,6 +1003,7 @@ class commentateur:
             return
         else:
             return code
+
     # ______________________________________________________________________
     # Comment full program
 
@@ -1127,7 +1120,7 @@ class commentateur:
         code_with_docstring = self.correct_py_file("", modified_code)
         return code_with_docstring, short_resume
 
-    def _print(self, text, role:str = "system_print"):
+    def _print(self, text, role: str = "system_print"):
         print(text)
         self.print.append({role: text})
 
@@ -1136,9 +1129,9 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--file", help="File to comment (other parameters not necessary")
-    parser.add_argument("-o", "--original", help="Path folder to copy original file before comment (for continues usage)")
-    parser.add_argument("-m", "--modified", help="Path folder to with commented file (for continues usage)")
-    parser.add_argument("-p", "--push", help="Path folder waiting a new file or folder to comment (for continues usage)")
+    parser.add_argument("-o", "--original", help="Path folder to copy original file before comment (for infinite loop)")
+    parser.add_argument("-m", "--modified", help="Path folder to with commented file (for infinite loop)")
+    parser.add_argument("-p", "--push", help="Path folder waiting a new file or folder to comment (for infinite loop)")
     args = parser.parse_args()
 
     if get_openai_api_key() is not None:
@@ -1150,4 +1143,4 @@ if __name__ == '__main__':
             ptc = args.original if args.original else None
             pts = args.modified if args.modified else None
             comment = commentateur(path_to_watch=ptw, path_to_copy=ptc, path_to_save=pts, watchdog=True)
-            comment.watch_push_code_here()
+            comment.process_folder()
