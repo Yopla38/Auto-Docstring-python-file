@@ -30,8 +30,11 @@ Usage :
         
         simple file : python comment_py_file.py -f path_of_py_file_to_comment
         watchdog : python comment_file_py.py 
-                    When the program is run, 3 folders are created if missing: Push_code_here where the code to be commented will be deposited, Original where a copy of each code before modification will be copied and Modified where the commented                        code will be created.
-                    The program looks for the presence of file in Push_code_here every 2 seconds. When a file is dropped, it copies it to Original, then comments it in Modified.
+                    When the program is run, 3 folders are created if missing: Push_code_here where the 
+                    code to be commented will be deposited (can be folder), Original where a copy of each code and file 
+                    before modification will be copied and Modified where the commented code will be created.
+                    The program looks for the presence of file in Push_code_here every 2 seconds. When 
+                    a file is dropped, it copies it to Original, then comments it in Modified.
                     The program works correctly with python files, for c files, tests remain to be done.
                     Other parameters : -o copy_folders
                                        -m modified_folder
