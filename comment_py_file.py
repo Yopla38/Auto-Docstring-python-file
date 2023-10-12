@@ -9,6 +9,7 @@
 import os
 import shutil
 import subprocess
+import textwrap
 import time
 import openai
 import re
@@ -16,7 +17,7 @@ import ast
 from openai.error import OpenAIError
 import autopep8
 from distutils import dir_util
-
+import yapf.yapflib.yapf_api
 
 API_langage = {"en": "You are able to write doc-strings respecting PEP 7 and google style convention by adding them to the "
                "python function provided as input. the response should not be in a comment block, "
@@ -309,7 +310,7 @@ class commentateur:
             # Vérifie et commente d'eventuelle lignes non commentées
             self.correct_py_file(path_file)
 
-    def add_python_docstring(self, code_str):
+    def add_python_docstring(self, code_str_):
         """This function adds detailed python docstrings to functions in a given code string.
 
         Parameters:
@@ -324,11 +325,13 @@ class commentateur:
         If the name of a function is not present, it is skipped. Otherwise, the function generates a docstring using GPT-3 and indents it properly before inserting it at the start of the function's code block.
         The updated code string is returned along with a summary of the docstrings added to the functions."""
         resume_all_docstring = ""
+        code_str, _ = yapf.yapflib.yapf_api.FormatCode(code_str_, style_config='google')
         new_code_str = code_str
         functions = self.extract_functions(code_str)
         functions_names = self.noms_fonctions_dans_code(code_str)
+
         nb_func = len(functions)
-        for function_str, start_index in functions:
+        for function_str, start_index, header in functions:
             print("Function untraited : " + str(nb_func))
             function_name = self.noms_fonctions_dans_code(function_str)
             if function_name[0] not in functions_names:
@@ -338,6 +341,7 @@ class commentateur:
                 functions_names.remove(function_name[0])
 
             # Récupère le docstring
+
             doc_string = self.GPT_choice("Turbo", "docstring google style python", function_str)
             short_docstring = self.GPT_choice("Turbo", "short docstring", doc_string)
 
@@ -348,12 +352,22 @@ class commentateur:
                                     " : " + short_docstring + "\n"
             doc_string = self.verify_triple_quotes(doc_string)
 
-            # print(doc_string)
-
             # Indente le docstring en utilisant la même indentation que la fonction d'origine
             indentation = self.get_indentation(function_str)
             doc_string = self.indent_code_str(doc_string, len(indentation) + 4)
 
+            lines = function_str.split('\n')
+
+            if len(lines) > header:  # car l'indice commence à 0 ici
+                lines.insert(header + 1, doc_string)  # insérer doc_string après l'en-tête
+                code_str = "\n".join(lines)
+            else:
+                code_str = function_str
+
+            new_code_str = new_code_str.replace(function_str, code_str)
+            nb_func -= 1
+
+            '''
             lines = function_str.split('\n')
             if len(lines) > 1:
                 lines.insert(1, doc_string)
@@ -362,7 +376,7 @@ class commentateur:
                 code_str = function_str
             new_code_str = new_code_str.replace(function_str, code_str)
             nb_func -= 1
-
+            '''
         return new_code_str, resume_all_docstring
 
     @staticmethod
@@ -402,6 +416,7 @@ class commentateur:
         indent = len(self.get_indentation(code_str))
         if indent > 0:
             code_str = self.indent_code_str(code_str, -indent)
+
         # Analyser le code source avec le module AST de Python
         arbre_syntaxe = ast.parse(code_str)
 
@@ -632,8 +647,7 @@ class commentateur:
 
         f = self.format_langage(langage)
         prompt = function_or_method + "\n" + f["prompt"] + "\n" + f["start"]
-        print(prompt)
-        input()
+
         response = openai.Completion.create(
             model=f["engine"],
             prompt=prompt,
@@ -709,7 +723,7 @@ class commentateur:
         return None
 
     @staticmethod
-    def extract_functions(code):
+    def _extract_functions(code):
         """
         The function extracts all functions in a given source code string and returns them as a list
         of tuples, where each tuple contains the function's source code (as a string) and its indent level (as an integer).
@@ -728,6 +742,7 @@ class commentateur:
         functions = []
         current_function = None
         indent_level = 0
+
         for line in code.split('\n'):
             actual_indent_line = len(line) - len(line.lstrip())
             if line.strip().startswith('def '):
@@ -745,8 +760,66 @@ class commentateur:
                         indent_level = 0
                 else:
                     current_function += '\n' + line
+
         if current_function:
             functions.append((current_function, indent_level))
+
+        return functions
+
+    @staticmethod
+    def extract_functions(code: str):
+        functions = []
+        current_function = None
+        indent_level = None
+        header_indent_level = None
+        header_lines = 0
+        in_header = False
+
+        for line in code.split('\n'):
+            stripped_line = line.lstrip()
+            indent_size = len(line) - len(stripped_line)
+
+            if stripped_line.startswith('def '):
+                if current_function:
+                    functions.append((current_function, indent_level // 4, header_lines))
+                in_header = True
+                header_lines = 0
+                current_function = line
+                indent_level = indent_size
+                header_indent_level = line.index('(') + 1
+
+            elif current_function and indent_size >= header_indent_level and in_header:
+                header_lines += 1
+                if line.isspace() or len(line.strip()) > 0:
+                    current_function += "\n" + line
+
+            elif current_function and not in_header and indent_size >= header_indent_level:
+                if line.isspace() or len(line.strip()) > 0:
+                    if indent_size > indent_level:
+                        current_function += '\n' + line
+                    else:
+                        functions.append((current_function, indent_level // 4, header_lines))
+                        current_function = None
+                        indent_level = 0
+                else:
+                    current_function += '\n' + line
+
+            elif current_function and indent_size < header_indent_level:
+                in_header = False
+                if line.isspace() or len(line.strip()) > 0:
+                    if indent_size > indent_level:
+                        current_function += '\n' + line
+                    else:
+                        functions.append((current_function, indent_level // 4, header_lines))
+                        current_function = None
+                        indent_level = 0
+                else:
+                    current_function += '\n' + line
+
+                #functions.append((current_function, indent_level // 4, header_lines))
+
+        if current_function:
+            functions.append((current_function, indent_level // 4, header_lines))
 
         return functions
 
